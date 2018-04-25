@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import gc
 import time
-
+import platform
 def get_df_last(n,PATH=Path('data')):
 	dtypes = {
 		'ip'			: 'uint32',
@@ -28,33 +28,14 @@ def get_feather(fname,PATH=Path('data')):
 	return pd.read_feather(PATH / fname)
 
 
-def mean_enc_smoothing(df,cols,targ,new_fea,glob_mean,alpha=0,df_val=None,save_day=None):
-	group_means = df.groupby(cols)[targ].mean()
-	n_group=df.groupby(cols).size()
 
-	mean_df = (group_means*n_group + glob_mean*alpha)/ (n_group+alpha)
-	mean_df= mean_df.reset_index().rename(columns={0:new_fea})
-	if not save_day is None:
-		filename= f'{new_fea}_day{save_day}_alpha{alpha}.feather'
-		mean_df.to_feather( Path('data') / filename)
-
-	df = pd.merge(df,mean_df,'left',on=cols)
-	if not df_val is None:
-		print(f'Generating {new_fea}...')
-		df_val = pd.merge(df_val,mean_df,'left',on=cols)
-		df_val[new_fea].fillna(glob_mean,inplace=True)
-
-	del mean_df
-	gc.collect()
-
-	return df,df_val
 
 def mean_enc_df_export(df,cols,targ,new_fea,glob_mean,save_day,alpha=0):
 	group_means = df.groupby(cols)[targ].mean()
 	n_group=df.groupby(cols).size()
 
-	new_fea = f'{new_fea}_day{save_day}_alpha{alpha}'
-	print(f'Generating {new_fea}...')
+	new_fea = f'{new_fea}_prevday_alpha{alpha}'
+	print(f'Generating {new_fea} for day {save_day}...')
 	mean_df = (group_means*n_group + glob_mean*alpha)/ (n_group+alpha)
 	mean_df= mean_df.reset_index().rename(columns={0:new_fea})
 	filename= f'{new_fea}.feather'
@@ -65,7 +46,8 @@ def merge_mean_to_val(val_df,glob_mean,prev_day):
 	mean_filenames = [str(i) for i in list(path.iterdir())]
 	for filename in mean_filenames:
 		mean_df = pd.read_feather(filename)
-		new_fea = filename.split('/')[-1].split('.')[0]
+		path_div = '\\' if platform.system()=='Windows' else '/'
+		new_fea = filename.split(path_div)[-1].split('.')[0]
 		cols = new_fea[: new_fea.find('mean')-1].split('_')
 		print(f'Generating {new_fea} for validation set...')
 		val_df = pd.merge(val_df,mean_df,'left',on=cols)
@@ -147,3 +129,16 @@ def downcast_dtypes(df):
 	df[int_cols]   = df[int_cols].astype(np.int32)
 
 	return df
+
+def get_cv_idxs(n,portion):
+	val_idxs=[]
+	idxs = np.random.permutation(n)
+	s,e= 0,n//portion
+	for i in range(portion-1):
+		val_idx = sorted(idxs[s:e])
+		val_idxs.append(val_idx)
+		s=e
+		e+=n//portion
+
+	val_idxs.append(sorted(idxs[s:]))
+	return val_idxs
