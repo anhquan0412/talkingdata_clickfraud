@@ -5,6 +5,11 @@ from pathlib import Path
 import gc
 import time
 import platform
+
+from sklearn.metrics import roc_auc_score
+import pickle
+
+
 def get_df_last(n,PATH=Path('data')):
 	dtypes = {
 		'ip'			: 'uint32',
