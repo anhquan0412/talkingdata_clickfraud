@@ -109,6 +109,17 @@ def time_till_next_click(df,cols,new_fea):
 	df[new_fea].fillna(-1,inplace=True)
 	df[new_fea] = df[new_fea].astype(np.int32)
 	return df
+def next_prev_click(df,cols,next_fea,prev_fea):
+	df[clicktime_sec]=(df['click_time'].astype(np.int64) // (10**9)).astype(np.int32)
+	df[next_fea] = (df.groupby(cols).clicktime_sec.shift(-1) - df.clicktime_sec).astype(np.float32)
+	#df[next_fea].fillna(-1,inplace=True)
+	df[prev_fea]=(df.click_sec - df.groupby(cols).clicktime_sec.shift(1)).astype(np.float32)
+	#df[prev_fea].fillna(-1,inplace=True)
+
+	df.drop('clicktime_sec',axis=1,inplace=True)
+	gc.collect()
+	return df
+
 def time_feature(df):
 	df['day'] = df['click_time'].dt.day.astype('uint8')
 	df['hour'] = df['click_time'].dt.hour.astype('uint8')
@@ -147,3 +158,31 @@ def get_cv_idxs(n,portion):
 
 	val_idxs.append(sorted(idxs[s:]))
 	return val_idxs
+
+def get_sample_timeseries(filename,sz):
+	df = get_feather(filename)
+	sample_idx =np.random.permutation(df.shape[0])
+	sample_idx=sorted(sample_idx[:sz])
+	df = df.loc[sample_idx,:].reset_index().drop('index',axis=1)
+	gc.collect()
+	return df
+
+def prediction_score(rf,train_df,y_train,val_df,y_val):
+	y_train_pred = rf.predict_proba(train_df)[:,1]
+	print(f'Train AUC: {roc_auc_score(y_train, y_train_pred)}')
+	y_val_pred = rf.predict_proba(val_df)[:,1]
+	val_auc = roc_auc_score(y_val, y_val_pred)
+	print(f'Val AUC: {roc_auc_score(y_val, y_val_pred)}')
+	return val_auc
+def get_val_by_name(cols_to_drop,name):
+	val_df = pd.read_feather(name)
+	y_val = val_df.is_attributed
+	val_df.drop(cols_to_drop,axis=1,inplace=True)
+	gc.collect()
+	return val_df,y_val
+def get_train(cols_to_drop,sz=3000000):
+	train_df=get_sample_timeseries('train_day8_3to16_FE.feather',sz)
+	y_train = train_df.is_attributed
+	train_df.drop(cols_to_drop,axis=1,inplace=True)
+	gc.collect()
+	return train_df,y_train
